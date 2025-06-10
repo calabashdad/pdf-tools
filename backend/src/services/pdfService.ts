@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
 import pdf2pic from 'pdf2pic';
@@ -28,14 +28,15 @@ export class PDFService {
           font: helveticaFont,
           color: rgb(0.5, 0.5, 0.5),
           opacity: 0.3,
-          rotate: { angle: 45 * (Math.PI / 180) }
+          rotate: degrees(45)
         });
       });
       
       const modifiedPdfBytes = await pdfDoc.save();
       await fs.writeFile(outputPath, modifiedPdfBytes);
     } catch (error) {
-      throw new Error(`添加水印失败: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`添加水印失败: ${errorMessage}`);
     }
   }
   
@@ -54,10 +55,22 @@ export class PDFService {
         height: 2000
       });
       
+      if (!convert.bulk) {
+        throw new Error('pdf2pic bulk method is not available');
+      }
+      
       const results = await convert.bulk(-1);
-      return results.map(result => result.path);
+      return results
+        .map(result => {
+          if ('path' in result && result.path) {
+            return result.path;
+          }
+          return null;
+        })
+        .filter((path): path is string => path !== null);
     } catch (error) {
-      throw new Error(`PDF转图片失败: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`PDF转图片失败: ${errorMessage}`);
     }
   }
   
@@ -77,7 +90,8 @@ export class PDFService {
       const modifiedPdfBytes = await pdfDoc.save();
       await fs.writeFile(outputPath, modifiedPdfBytes);
     } catch (error) {
-      throw new Error(`插入空白页失败: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`插入空白页失败: ${errorMessage}`);
     }
   }
   
@@ -108,7 +122,8 @@ export class PDFService {
       const modifiedPdfBytes = await pdfDoc.save();
       await fs.writeFile(outputPath, modifiedPdfBytes);
     } catch (error) {
-      throw new Error(`添加文字失败: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`添加文字失败: ${errorMessage}`);
     }
   }
 }
