@@ -1,7 +1,7 @@
-import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
-import pdfParse from 'pdf-parse';
+import puppeteer from 'puppeteer';
+import { PDFDocument } from 'pdf-lib';
 
 interface ConvertToImagesOptions {
     pdfPath: string;
@@ -39,10 +39,10 @@ export class PdfService {
                 fs.mkdirSync(outputPath, { recursive: true });
             }
 
-            // 解析 PDF 获取页数
+            // 读取PDF文件
             const pdfBuffer = fs.readFileSync(pdfPath);
-            const pdfData = await pdfParse(pdfBuffer);
-            const pageCount = pdfData.numpages || 1;
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            const pageCount = pdfDoc.getPageCount();
             
             const browser = await puppeteer.launch();
             const page = await browser.newPage();
@@ -50,29 +50,43 @@ export class PdfService {
             const imagePaths: string[] = [];
             
             // 为每一页生成图片
-            for (let i = 1; i <= pageCount; i++) {
-                const imagePath = path.join(outputPath, `page-${i}.png`);
+            for (let i = 0; i < pageCount; i++) {
+                const imagePath = path.join(outputPath, `page-${i + 1}.png`);
                 
+                // 创建只包含当前页面的新PDF
+                const singlePagePdf = await PDFDocument.create();
+                const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [i]);
+                singlePagePdf.addPage(copiedPage);
+                
+                // 将单页PDF转换为base64
+                const pdfBytes = await singlePagePdf.save();
+                const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+                
+                // 使用puppeteer渲染PDF
                 const html = `
                     <!DOCTYPE html>
                     <html>
                         <head>
-                            <title>PDF Page ${i}</title>
                             <style>
-                                body { font-family: Arial, sans-serif; padding: 20px; }
-                                h1 { color: #333; }
+                                body { margin: 0; padding: 0; }
+                                embed { width: 100vw; height: 100vh; }
                             </style>
                         </head>
                         <body>
-                            <h1>PDF 页面 ${i}</h1>
-                            <p>这是从 PDF 第 ${i} 页生成的模拟图片</p>
-                            <p>Page ${i} of ${pageCount}</p>
+                            <embed src="data:application/pdf;base64,${pdfBase64}" type="application/pdf" />
                         </body>
                     </html>
                 `;
                 
                 await page.setContent(html);
-                await page.screenshot({ path: imagePath as `${string}.png`, fullPage: true });
+                await page.setViewport({ width: 1200, height: 1600 });
+                // 使用 Promise 替代，更兼容各版本 Puppeteer
+                await new Promise(resolve => setTimeout(resolve, 2000)); // 等待PDF加载
+                await page.screenshot({ 
+                    path: imagePath as `${string}.png`, 
+                    fullPage: false,
+                    clip: { x: 0, y: 0, width: 1200, height: 1600 }
+                });
                 imagePaths.push(imagePath);
             }
             
