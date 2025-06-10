@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PDFService } from '../services/pdfService';
+import { PdfService } from '../services/pdfService';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -17,7 +17,8 @@ export class PDFController {
       const inputPath = file.path;
       const outputPath = path.join('uploads', `watermarked-${file.filename}`);
       
-      await PDFService.addWatermark(inputPath, watermarkText, outputPath);
+      const pdfService = new PdfService();
+      await pdfService.addWatermark({ pdfPath: inputPath, watermarkText, outputPath });
       
       res.json({
         message: '水印添加成功',
@@ -44,9 +45,10 @@ export class PDFController {
       // 创建输出目录
       await fs.mkdir(outputDir, { recursive: true });
       
-      const imagePaths = await PDFService.convertToImages(inputPath, outputDir);
+      const pdfService = new PdfService();
+      const imagePaths = await pdfService.convertToImages({ pdfPath: inputPath, outputPath: outputDir });
       
-      const imageUrls = imagePaths.map(imagePath => 
+      const imageUrls = imagePaths.map((imagePath: string) => 
         `/uploads/images/${path.parse(file.filename).name}/${path.basename(imagePath)}`
       );
       
@@ -73,7 +75,8 @@ export class PDFController {
       const inputPath = file.path;
       const outputPath = path.join('uploads', `blank-page-${file.filename}`);
       
-      await PDFService.insertBlankPage(inputPath, parseInt(pageIndex), outputPath);
+      const pdfService = new PdfService();
+      await pdfService.insertBlankPage({ pdfPath: inputPath, pageIndex: parseInt(pageIndex), outputPath });
       
       res.json({
         message: '空白页插入成功',
@@ -98,14 +101,15 @@ export class PDFController {
       const inputPath = file.path;
       const outputPath = path.join('uploads', `text-added-${file.filename}`);
       
-      await PDFService.addText(
-        inputPath, 
-        text, 
-        parseInt(x), 
-        parseInt(y), 
-        parseInt(pageIndex), 
+      const pdfService = new PdfService();
+      await pdfService.addText({
+        pdfPath: inputPath,
+        text,
+        x: parseInt(x),
+        y: parseInt(y),
+        pageIndex: parseInt(pageIndex),
         outputPath
-      );
+      });
       
       res.json({
         message: '文字添加成功',
