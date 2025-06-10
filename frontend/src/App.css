@@ -1,0 +1,28 @@
+.ant-layout-header {
+  padding: 0 24px;
+  line-height: 64px;
+}
+
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ant-upload-drag {
+  border: 2px dashed #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+  transition: border-color 0.3s ease;
+}
+
+.ant-upload-drag:hover {
+  border-color: #1890ff;
+}
+
+.ant-upload-drag.ant-upload-drag-hover {
+  border-color: #40a9ff;
+}
