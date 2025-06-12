@@ -73,5 +73,18 @@ export const pdfService = {
     }
     
     return response.json();
-  }
+  },
+  
+  async downloadImagesZip(imageFolder: string) {
+    const response = await fetch(`${API_BASE_URL}/download-images-zip/${imageFolder}`, {
+      method: 'GET',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || '下载失败');
+    }
+    
+    return response.blob();
+  },
 };

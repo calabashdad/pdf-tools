@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { PdfService } from '../services/pdfService';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 
 export class PDFController {
   // 添加水印
@@ -22,7 +23,7 @@ export class PDFController {
       
       res.json({
         message: '水印添加成功',
-        downloadUrl: `/uploads/${path.basename(outputPath)}`
+        downloadUrl: `/uploads/watermarked-${file.filename}`
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '添加水印时发生未知错误';
@@ -42,8 +43,8 @@ export class PDFController {
       const inputPath = file.path;
       const outputDir = path.join('uploads', 'images', path.parse(file.filename).name);
       
-      // 创建输出目录
-      await fs.mkdir(outputDir, { recursive: true });
+      // 创建输出目录 - 使用fsPromises
+      await fsPromises.mkdir(outputDir, { recursive: true });
       
       const pdfService = new PdfService();
       const imagePaths = await pdfService.convertToImages({ pdfPath: inputPath, outputPath: outputDir });
@@ -117,6 +118,61 @@ export class PDFController {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '添加文字时发生未知错误';
+      res.status(500).json({ error: errorMessage });
+    }
+  }
+  
+  // 下载所有转换的图片为ZIP文件
+  static async downloadImagesZip(req: Request, res: Response) {
+    try {
+      const { imageFolder } = req.params;
+      
+      if (!imageFolder) {
+        return res.status(400).json({ error: '请提供图片文件夹名称' });
+      }
+      
+      const imagesDir = path.join('uploads', 'images', imageFolder);
+      
+      if (!fs.existsSync(imagesDir)) {
+        return res.status(404).json({ error: '图片文件夹不存在' });
+      }
+      
+      // 获取文件夹中的所有PNG文件
+      const files = fs.readdirSync(imagesDir);
+      const imagePaths = files
+        .filter((file: string) => file.endsWith('.png'))
+        .map((file: string) => path.join(imagesDir, file));
+      
+      if (imagePaths.length === 0) {
+        return res.status(404).json({ error: '没有找到图片文件' });
+      }
+      
+      const zipFileName = `${imageFolder}-images.zip`;
+      const zipPath = path.join('uploads', 'temp', zipFileName);
+      
+      // 确保临时目录存在
+      await fsPromises.mkdir(path.dirname(zipPath), { recursive: true });
+      
+      const pdfService = new PdfService();
+      await pdfService.createImagesZip(imagePaths, zipPath);
+      
+      // 设置响应头
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+      
+      // 发送文件
+      const fileStream = fs.createReadStream(zipPath);
+      fileStream.pipe(res);
+      
+      // 文件发送完成后删除临时ZIP文件
+      fileStream.on('end', () => {
+        fs.unlink(zipPath, (err: any) => {
+          if (err) console.error('删除临时ZIP文件失败:', err);
+        });
+      });
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '创建ZIP文件时发生未知错误';
       res.status(500).json({ error: errorMessage });
     }
   }

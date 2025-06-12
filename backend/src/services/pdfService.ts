@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
 import { PDFDocument } from 'pdf-lib';
+import archiver from 'archiver';
 
 interface ConvertToImagesOptions {
     pdfPath: string;
@@ -111,5 +112,35 @@ export class PdfService {
     async addText(options: AddTextOptions): Promise<void> {
         // 暂时抛出错误，提示需要实现
         throw new Error('addText 方法尚未实现');
+    }
+    
+    async createImagesZip(imagePaths: string[], outputZipPath: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const output = fs.createWriteStream(outputZipPath);
+            const archive = archiver('zip', {
+                zlib: { level: 9 } // 设置压缩级别
+            });
+            
+            output.on('close', () => {
+                console.log(`ZIP文件已创建: ${archive.pointer()} 字节`);
+                resolve(outputZipPath);
+            });
+            
+            archive.on('error', (err) => {
+                reject(err);
+            });
+            
+            archive.pipe(output);
+            
+            // 添加所有图片到ZIP文件
+            imagePaths.forEach((imagePath, index) => {
+                if (fs.existsSync(imagePath)) {
+                    const fileName = `page-${index + 1}.png`;
+                    archive.file(imagePath, { name: fileName });
+                }
+            });
+            
+            archive.finalize();
+        });
     }
 }

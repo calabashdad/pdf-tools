@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Upload, Button, Card, Typography, message, Progress } from 'antd';
-import { InboxOutlined, DownloadOutlined } from '@ant-design/icons';
+import { InboxOutlined, DownloadOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
+import { pdfService } from '../services/pdfService';
 
 const { Title, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -10,6 +11,8 @@ export const ConvertPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [convertedImages, setConvertedImages] = useState<string[]>([]);
+  const [imageFolder, setImageFolder] = useState<string>('');
+  const [downloadingZip, setDownloadingZip] = useState(false);
 
   const uploadProps: UploadProps = {
     name: 'file',
@@ -52,6 +55,14 @@ export const ConvertPage: React.FC = () => {
         if (response.ok) {
           const result = await response.json();
           setConvertedImages(result.images || []);
+          // 从第一个图片URL中提取文件夹名称
+          if (result.images && result.images.length > 0) {
+            const firstImagePath = result.images[0];
+            const folderMatch = firstImagePath.match(/\/uploads\/images\/([^\/]+)\//); 
+            if (folderMatch) {
+              setImageFolder(folderMatch[1]);
+            }
+          }
           onSuccess?.(result);
           message.success('PDF 转换成功！');
         } else {
@@ -64,6 +75,34 @@ export const ConvertPage: React.FC = () => {
         setUploading(false);
       }
     },
+  };
+  
+  const handleDownloadAll = async () => {
+    if (!imageFolder) {
+      message.error('没有可下载的图片');
+      return;
+    }
+    
+    try {
+      setDownloadingZip(true);
+      const blob = await pdfService.downloadImagesZip(imageFolder);
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${imageFolder}-images.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('所有图片下载成功！');
+    } catch (error) {
+      message.error('下载失败，请重试');
+    } finally {
+      setDownloadingZip(false);
+    }
   };
 
   return (
@@ -95,7 +134,18 @@ export const ConvertPage: React.FC = () => {
         
         {convertedImages.length > 0 && (
           <div className="mt-6">
-            <Title level={4}>转换结果</Title>
+            <div className="flex justify-between items-center mb-4">
+              <Title level={4}>转换结果</Title>
+              <Button 
+                type="primary" 
+                icon={<CloudDownloadOutlined />}
+                onClick={handleDownloadAll}
+                loading={downloadingZip}
+                size="large"
+              >
+                一键下载所有图片
+              </Button>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
               {convertedImages.map((image, index) => (
                 <div key={index} className="border rounded p-2">
