@@ -45,7 +45,10 @@ export class PdfService {
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             const pageCount = pdfDoc.getPageCount();
             
-            const browser = await puppeteer.launch();
+            const browser = await puppeteer.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
             const page = await browser.newPage();
             
             const imagePaths: string[] = [];
@@ -53,6 +56,15 @@ export class PdfService {
             // 为每一页生成图片
             for (let i = 0; i < pageCount; i++) {
                 const imagePath = path.join(outputPath, `page-${i + 1}.png`);
+                
+                // 获取当前页面的尺寸
+                const currentPage = pdfDoc.getPage(i);
+                const { width: pageWidth, height: pageHeight } = currentPage.getSize();
+                
+                // 计算合适的视口尺寸，保持PDF页面的宽高比
+                const scale = 2; // 提高分辨率
+                const viewportWidth = Math.round(pageWidth * scale);
+                const viewportHeight = Math.round(pageHeight * scale);
                 
                 // 创建只包含当前页面的新PDF
                 const singlePagePdf = await PDFDocument.create();
@@ -63,14 +75,26 @@ export class PdfService {
                 const pdfBytes = await singlePagePdf.save();
                 const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
                 
-                // 使用puppeteer渲染PDF
+                // 使用puppeteer渲染PDF，移除侧边空白
                 const html = `
                     <!DOCTYPE html>
                     <html>
                         <head>
                             <style>
-                                body { margin: 0; padding: 0; }
-                                embed { width: 100vw; height: 100vh; }
+                                * { margin: 0; padding: 0; box-sizing: border-box; }
+                                body { 
+                                    margin: 0; 
+                                    padding: 0; 
+                                    width: 100vw; 
+                                    height: 100vh;
+                                    overflow: hidden;
+                                }
+                                embed { 
+                                    width: 100%; 
+                                    height: 100%; 
+                                    border: none;
+                                    display: block;
+                                }
                             </style>
                         </head>
                         <body>
@@ -80,14 +104,23 @@ export class PdfService {
                 `;
                 
                 await page.setContent(html);
-                await page.setViewport({ width: 1200, height: 1600 });
-                // 使用 Promise 替代，更兼容各版本 Puppeteer
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 等待PDF加载
+                await page.setViewport({ 
+                    width: viewportWidth, 
+                    height: viewportHeight,
+                    deviceScaleFactor: 1
+                });
+                
+                // 等待PDF加载完成
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // 截图，使用完整页面尺寸，避免侧边空白
                 await page.screenshot({ 
                     path: imagePath as `${string}.png`, 
-                    fullPage: false,
-                    clip: { x: 0, y: 0, width: 1200, height: 1600 }
+                    fullPage: true,
+                    type: 'png',
+                    omitBackground: false
                 });
+                
                 imagePaths.push(imagePath);
             }
             
