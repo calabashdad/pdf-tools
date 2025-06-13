@@ -261,7 +261,7 @@ export const ConvertPage: React.FC = () => {
              src={previewImage} 
              alt={previewTitle}
              style={{ 
-               transform: `scale(${scale}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+               transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale})`,
                transformOrigin: 'center',
                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
                maxWidth: 'none',
