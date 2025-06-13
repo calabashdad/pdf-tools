@@ -153,23 +153,20 @@ export const ConvertPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
               {convertedImages.map((image, index) => (
-                <div key={index} className="border rounded p-2">
+                <div key={index} className="border rounded p-2 cursor-pointer hover:shadow-lg transition-shadow">
                   <img 
                     src={`http://localhost:3001${image}`} 
                     alt={`Page ${index + 1}`}
-                    className="w-full h-auto"
-                  />
-                  <Button 
-                    type="link" 
-                    icon={<EyeOutlined />}
+                    className="w-full h-auto hover:opacity-80 transition-opacity"
                     onClick={() => {
                       setPreviewImage(`http://localhost:3001${image}`);
                       setPreviewTitle(`第 ${index + 1} 页`);
                       setPreviewVisible(true);
                     }}
-                  >
-                    预览
-                  </Button>
+                  />
+                  <div className="text-center mt-2 text-sm text-gray-600">
+                    第 {index + 1} 页
+                  </div>
                 </div>
               ))}
             </div>
