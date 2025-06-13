@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Upload, Button, Card, Typography, message, Progress } from 'antd';
-import { InboxOutlined, DownloadOutlined, CloudDownloadOutlined } from '@ant-design/icons';
+import { Upload, Button, Card, Typography, message, Progress, Modal } from 'antd';
+import { InboxOutlined, EyeOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { pdfService } from '../services/pdfService';
 
@@ -13,6 +13,9 @@ export const ConvertPage: React.FC = () => {
   const [convertedImages, setConvertedImages] = useState<string[]>([]);
   const [imageFolder, setImageFolder] = useState<string>('');
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string>('');
+  const [previewTitle, setPreviewTitle] = useState<string>('');
 
   const uploadProps: UploadProps = {
     name: 'file',
@@ -156,15 +159,14 @@ export const ConvertPage: React.FC = () => {
                   />
                   <Button 
                     type="link" 
-                    icon={<DownloadOutlined />}
+                    icon={<EyeOutlined />}
                     onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = `http://localhost:3001${image}`;
-                      link.download = `page-${index + 1}.png`;
-                      link.click();
+                      setPreviewImage(`http://localhost:3001${image}`);
+                      setPreviewTitle(`第 ${index + 1} 页`);
+                      setPreviewVisible(true);
                     }}
                   >
-                    下载
+                    预览
                   </Button>
                 </div>
               ))}
@@ -172,6 +174,23 @@ export const ConvertPage: React.FC = () => {
           </div>
         )}
       </Card>
+      
+      <Modal
+        open={previewVisible}
+        title={previewTitle}
+        footer={null}
+        onCancel={() => setPreviewVisible(false)}
+        width={800}
+        centered
+      >
+        <div className="text-center">
+          <img 
+            src={previewImage} 
+            alt={previewTitle}
+            style={{ maxWidth: '100%', maxHeight: '70vh' }}
+          />
+        </div>
+      </Modal>
     </div>
   );
 };
