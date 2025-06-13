@@ -18,6 +18,9 @@ export const ConvertPage: React.FC = () => {
   const [previewTitle, setPreviewTitle] = useState<string>('');
   const [scale, setScale] = useState(1);
   const imageRef = useRef<HTMLImageElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
 
   const uploadProps: UploadProps = {
     name: 'file',
@@ -194,51 +197,80 @@ export const ConvertPage: React.FC = () => {
                 disabled={scale >= 5}
               />
               <Button 
-                size="small" 
-                icon={<UndoOutlined />} 
-                onClick={() => setScale(1)}
-              />
+                 size="small" 
+                 icon={<UndoOutlined />} 
+                 onClick={() => {
+                   setScale(1);
+                   setImagePosition({ x: 0, y: 0 });
+                 }}
+               />
             </div>
           </div>
         }
         footer={null}
         onCancel={() => {
-          setPreviewVisible(false);
-          setScale(1);
-        }}
+           setPreviewVisible(false);
+           setScale(1);
+           setImagePosition({ x: 0, y: 0 });
+         }}
         width={900}
         centered
         styles={{
-          body: {
-            maxHeight: '80vh',
-            overflow: 'auto',
-            padding: '20px'
-          }
-        }}
+           body: {
+             maxHeight: '80vh',
+             overflow: 'hidden',
+             padding: '20px'
+           }
+         }}
       >
         <div 
-          className="text-center"
-          onWheel={(e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            setScale(prev => Math.max(0.1, Math.min(5, prev + delta)));
-          }}
-          style={{ cursor: scale !== 1 ? 'grab' : 'default' }}
-        >
-          <img 
-            ref={imageRef}
-            src={previewImage} 
-            alt={previewTitle}
-            style={{ 
-              transform: `scale(${scale})`,
-              transformOrigin: 'center',
-              transition: 'transform 0.1s ease-out',
-              maxWidth: 'none',
-              height: 'auto'
-            }}
-            draggable={false}
-          />
-        </div>
+           className="flex justify-center items-center"
+           style={{ 
+             height: '60vh',
+             overflow: 'hidden',
+             cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default')
+           }}
+           onWheel={(e) => {
+             e.preventDefault();
+             const delta = e.deltaY > 0 ? -0.1 : 0.1;
+             setScale(prev => Math.max(0.1, Math.min(5, prev + delta)));
+           }}
+           onMouseDown={(e) => {
+             if (scale > 1) {
+               setIsDragging(true);
+               setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+             }
+           }}
+           onMouseMove={(e) => {
+             if (isDragging && scale > 1) {
+               setImagePosition({
+                 x: e.clientX - dragStart.x,
+                 y: e.clientY - dragStart.y
+               });
+             }
+           }}
+           onMouseUp={() => {
+             setIsDragging(false);
+           }}
+           onMouseLeave={() => {
+             setIsDragging(false);
+           }}
+         >
+           <img 
+             ref={imageRef}
+             src={previewImage} 
+             alt={previewTitle}
+             style={{ 
+               transform: `scale(${scale}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+               transformOrigin: 'center',
+               transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+               maxWidth: 'none',
+               height: 'auto',
+               userSelect: 'none'
+             }}
+             draggable={false}
+           />
+         </div>
       </Modal>
     </div>
   );
