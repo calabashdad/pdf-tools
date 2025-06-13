@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Button, Card, Typography, message, Progress, Modal } from 'antd';
-import { InboxOutlined, EyeOutlined, CloudDownloadOutlined } from '@ant-design/icons';
+import { InboxOutlined, EyeOutlined, CloudDownloadOutlined, ZoomInOutlined, ZoomOutOutlined, UndoOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { pdfService } from '../services/pdfService';
 
@@ -16,6 +16,8 @@ export const ConvertPage: React.FC = () => {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewTitle, setPreviewTitle] = useState<string>('');
+  const [scale, setScale] = useState(1);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   const uploadProps: UploadProps = {
     name: 'file',
@@ -177,17 +179,67 @@ export const ConvertPage: React.FC = () => {
       
       <Modal
         open={previewVisible}
-        title={previewTitle}
+        title={
+          <div className="flex justify-between items-center">
+            <span>{previewTitle}</span>
+            <div className="flex gap-2">
+              <Button 
+                size="small" 
+                icon={<ZoomOutOutlined />} 
+                onClick={() => setScale(prev => Math.max(0.1, prev - 0.1))}
+                disabled={scale <= 0.1}
+              />
+              <span className="text-sm px-2 py-1">{Math.round(scale * 100)}%</span>
+              <Button 
+                size="small" 
+                icon={<ZoomInOutlined />} 
+                onClick={() => setScale(prev => Math.min(5, prev + 0.1))}
+                disabled={scale >= 5}
+              />
+              <Button 
+                size="small" 
+                icon={<UndoOutlined />} 
+                onClick={() => setScale(1)}
+              />
+            </div>
+          </div>
+        }
         footer={null}
-        onCancel={() => setPreviewVisible(false)}
-        width={800}
+        onCancel={() => {
+          setPreviewVisible(false);
+          setScale(1);
+        }}
+        width={900}
         centered
+        styles={{
+          body: {
+            maxHeight: '80vh',
+            overflow: 'auto',
+            padding: '20px'
+          }
+        }}
       >
-        <div className="text-center">
+        <div 
+          className="text-center"
+          onWheel={(e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            setScale(prev => Math.max(0.1, Math.min(5, prev + delta)));
+          }}
+          style={{ cursor: scale !== 1 ? 'grab' : 'default' }}
+        >
           <img 
+            ref={imageRef}
             src={previewImage} 
             alt={previewTitle}
-            style={{ maxWidth: '100%', maxHeight: '70vh' }}
+            style={{ 
+              transform: `scale(${scale})`,
+              transformOrigin: 'center',
+              transition: 'transform 0.1s ease-out',
+              maxWidth: 'none',
+              height: 'auto'
+            }}
+            draggable={false}
           />
         </div>
       </Modal>
