@@ -228,7 +228,7 @@ export const ConvertPage: React.FC = () => {
            style={{ 
              height: '60vh',
              overflow: 'hidden',
-             cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default')
+             cursor: isDragging ? 'grabbing' : 'grab'
            }}
            onWheel={(e) => {
              e.preventDefault();
@@ -236,13 +236,11 @@ export const ConvertPage: React.FC = () => {
              setScale(prev => Math.max(0.1, Math.min(5, prev + delta)));
            }}
            onMouseDown={(e) => {
-             if (scale > 1) {
-               setIsDragging(true);
-               setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
-             }
+             setIsDragging(true);
+             setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
            }}
            onMouseMove={(e) => {
-             if (isDragging && scale > 1) {
+             if (isDragging) {
                setImagePosition({
                  x: e.clientX - dragStart.x,
                  y: e.clientY - dragStart.y
