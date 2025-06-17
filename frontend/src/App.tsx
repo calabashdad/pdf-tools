@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage';
 import { WatermarkPage } from './pages/WatermarkPage';
 import { ConvertPage } from './pages/ConvertPage';
 import { EditPage } from './pages/EditPage';
+import { TableExtractPage } from './pages/TableExtractPage';
 import 'antd/dist/reset.css';
 import './App.css';
 
@@ -24,6 +25,7 @@ function App() {
             <Route path="/watermark" element={<WatermarkPage />} />
             <Route path="/convert" element={<ConvertPage />} />
             <Route path="/edit" element={<EditPage />} />
+            <Route path="/table-extract" element={<TableExtractPage />} />
           </Routes>
         </Content>
       </Layout>

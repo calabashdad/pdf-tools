@@ -1,7 +1,7 @@
 import React from 'react';
 import { Menu } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FileTextOutlined, PictureOutlined, EditOutlined, HomeOutlined } from '@ant-design/icons';
+import { FileTextOutlined, PictureOutlined, EditOutlined, HomeOutlined, TableOutlined } from '@ant-design/icons';
 
 export const Navbar: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +27,11 @@ export const Navbar: React.FC = () => {
       key: '/edit',
       icon: <EditOutlined />,
       label: '编辑PDF'
+    },
+    {
+      key: '/table-extract',
+      icon: <TableOutlined />,
+      label: '表格提取'
     }
   ];
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Row, Col, Button, Typography } from 'antd';
-import { FileTextOutlined, EditOutlined, PictureOutlined, ToolOutlined } from '@ant-design/icons';
+import { FileTextOutlined, EditOutlined, PictureOutlined, ToolOutlined, TableOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Title, Paragraph } = Typography;
@@ -26,6 +26,12 @@ export const HomePage: React.FC = () => {
       description: '编辑 PDF 内容，添加文本和页面',
       icon: <EditOutlined style={{ fontSize: '48px', color: '#fa8c16' }} />,
       path: '/edit'
+    },
+    {
+      title: '表格提取',
+      description: '提取PDF中的表格并导出为Excel文件',
+      icon: <TableOutlined style={{ fontSize: '48px', color: '#eb2f96' }} />,
+      path: '/table-extract'
     }
   ];
 

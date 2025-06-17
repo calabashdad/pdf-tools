@@ -6,6 +6,10 @@ interface AddWatermarkOptions {
     pdfPath: string;
     watermarkText: string;
     outputPath: string;
+    rotation?: number;
+    opacity?: number;
+    repeatCount?: number;
+    fontSize?: number;
 }
 interface InsertBlankPageOptions {
     pdfPath: string;

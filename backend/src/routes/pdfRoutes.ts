@@ -8,7 +8,9 @@ router.post('/watermark', upload.single('pdf'), PDFController.addWatermark);
 router.post('/convert-to-images', upload.single('pdf'), PDFController.convertToImages);
 router.post('/insert-blank-page', upload.single('pdf'), PDFController.insertBlankPage);
 router.post('/add-text', upload.single('pdf'), PDFController.addText);
+router.post('/extract-tables', upload.single('pdf'), PDFController.extractTables);
 router.get('/download-images-zip/:imageFolder', PDFController.downloadImagesZip);
 router.get('/download/:filename', PDFController.downloadPdf);
+router.get('/download-excel/:filename', PDFController.downloadExcel);
 
 export { router as pdfRoutes };
