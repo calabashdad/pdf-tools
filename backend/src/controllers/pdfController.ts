@@ -194,6 +194,7 @@ export class PDFController {
   static async downloadPdf(req: Request, res: Response) {
     try {
       const { filename } = req.params;
+      const { preview } = req.query;
       
       if (!filename) {
         return res.status(400).json({ error: '请提供文件名' });
@@ -207,7 +208,15 @@ export class PDFController {
 
       // 设置响应头
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      
+      // 根据preview参数决定是预览还是下载
+      if (preview === 'true') {
+        // 预览模式：inline显示
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      } else {
+        // 下载模式：attachment下载
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      }
       
       // 发送文件
       const fileStream = fs.createReadStream(filePath);

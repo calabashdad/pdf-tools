@@ -269,20 +269,40 @@ export class PdfService {
                 const { width, height } = page.getSize();
                 const fontSize = 50;
                 
-                // 计算水印位置（居中并稍微偏下）
-                const textWidth = finalWatermarkText.length * fontSize * 0.6; // 估算文本宽度
-                const x = (width - textWidth) / 2;
-                const y = height / 2 - fontSize / 2;
+                // 获取文本的实际宽度和高度
+                const textWidth = font.widthOfTextAtSize(finalWatermarkText, fontSize);
+                const textHeight = font.heightAtSize(fontSize);
                 
-                // 添加水印文本
-                page.drawText(finalWatermarkText, {
-                    x: x,
-                    y: y,
-                    size: fontSize,
-                    opacity: opacity,
-                    rotate: degrees(rotation), // 使用动态旋转角度
-                    color: rgb(0.7, 0.7, 0.7),
-                    font: font,
+                // 定义3个水印位置（水平均匀分布）
+                const positions = [
+                    {
+                        // 左侧中部
+                        x: width * 0.25 - textWidth / 2,
+                        y: height * 0.5 - textHeight / 2
+                    },
+                    {
+                        // 页面中心
+                        x: (width - textWidth) / 2,
+                        y: (height - textHeight) / 2
+                    },
+                    {
+                        // 右侧中部
+                        x: width * 0.75 - textWidth / 2,
+                        y: height * 0.5 - textHeight / 2
+                    }
+                ];
+                
+                // 在3个位置重复添加水印文本
+                positions.forEach((position) => {
+                    page.drawText(finalWatermarkText, {
+                        x: position.x,
+                        y: position.y,
+                        size: fontSize,
+                        opacity: opacity,
+                        rotate: degrees(rotation), // 使用动态旋转角度
+                        color: rgb(0.7, 0.7, 0.7),
+                        font: font,
+                    });
                 });
             }
             

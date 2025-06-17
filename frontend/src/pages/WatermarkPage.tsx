@@ -122,13 +122,27 @@ export const WatermarkPage: React.FC = () => {
           </Button>
           
           {downloadUrl && (
-            <Button
-              type="default"
-              size="large"
-              onClick={handleDownload}
-            >
-              下载文件
-            </Button>
+            <div className="mt-4">
+              <div className="mb-4">
+                <Title level={4}>预览效果</Title>
+                <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '600px' }}>
+                  <iframe
+                    src={downloadUrl.startsWith('http') ? `${downloadUrl}?preview=true` : `http://localhost:3001${downloadUrl}?preview=true`}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 'none' }}
+                    title="PDF预览"
+                  />
+                </div>
+              </div>
+              <Button
+                type="default"
+                size="large"
+                onClick={handleDownload}
+              >
+                下载文件
+              </Button>
+            </div>
           )}
         </Space>
       </Card>
