@@ -16,6 +16,8 @@ interface AddWatermarkOptions {
     outputPath: string;
     rotation?: number; // 旋转角度，默认-45度
     opacity?: number;  // 透明度，0-1之间，默认0.3
+    repeatCount?: number; // 水印重复次数，默认3次
+    fontSize?: number; // 字体大小，默认50
 }
 
 interface InsertBlankPageOptions {
@@ -194,7 +196,7 @@ export class PdfService {
     
     async addWatermark(options: AddWatermarkOptions): Promise<void> {
         try {
-            const { pdfPath, watermarkText, outputPath, rotation = -45, opacity = 0.3 } = options;
+            const { pdfPath, watermarkText, outputPath, rotation = -45, opacity = 0.3, repeatCount = 3, fontSize = 50 } = options;
             
             // 读取原始PDF文件
             const existingPdfBytes = fs.readFileSync(pdfPath);
@@ -267,32 +269,90 @@ export class PdfService {
             // 遍历所有页面添加水印
             for (const page of pages) {
                 const { width, height } = page.getSize();
-                const fontSize = 50;
-                
                 // 获取文本的实际宽度和高度
                 const textWidth = font.widthOfTextAtSize(finalWatermarkText, fontSize);
                 const textHeight = font.heightAtSize(fontSize);
                 
-                // 定义3个水印位置（水平均匀分布）
-                const positions = [
-                    {
-                        // 左侧中部
-                        x: width * 0.25 - textWidth / 2,
-                        y: height * 0.5 - textHeight / 2
-                    },
-                    {
-                        // 页面中心
+                // 根据repeatCount动态生成水印位置
+                const positions = [];
+                
+                // 如果只有1个水印，放在中心位置
+                if (repeatCount === 1) {
+                    positions.push({
                         x: (width - textWidth) / 2,
                         y: (height - textHeight) / 2
-                    },
-                    {
-                        // 右侧中部
-                        x: width * 0.75 - textWidth / 2,
-                        y: height * 0.5 - textHeight / 2
+                    });
+                } 
+                // 如果有2个水印，放在上下位置
+                else if (repeatCount === 2) {
+                    positions.push(
+                        {
+                            x: (width - textWidth) / 2,
+                            y: height * 0.75 - textHeight / 2
+                        },
+                        {
+                            x: (width - textWidth) / 2,
+                            y: height * 0.25 - textHeight / 2
+                        }
+                    );
+                }
+                // 如果有3个水印，使用默认的左中右布局
+                else if (repeatCount === 3) {
+                    positions.push(
+                        {
+                            x: width * 0.25 - textWidth / 2,
+                            y: height * 0.5 - textHeight / 2
+                        },
+                        {
+                            x: (width - textWidth) / 2,
+                            y: (height - textHeight) / 2
+                        },
+                        {
+                            x: width * 0.75 - textWidth / 2,
+                            y: height * 0.5 - textHeight / 2
+                        }
+                    );
+                }
+                // 如果有4个水印，使用四角布局
+                else if (repeatCount === 4) {
+                    positions.push(
+                        {
+                            x: width * 0.25 - textWidth / 2,
+                            y: height * 0.75 - textHeight / 2
+                        },
+                        {
+                            x: width * 0.75 - textWidth / 2,
+                            y: height * 0.75 - textHeight / 2
+                        },
+                        {
+                            x: width * 0.25 - textWidth / 2,
+                            y: height * 0.25 - textHeight / 2
+                        },
+                        {
+                            x: width * 0.75 - textWidth / 2,
+                            y: height * 0.25 - textHeight / 2
+                        }
+                    );
+                }
+                // 如果有5个或更多水印，使用网格布局
+                else {
+                    // 计算行数和列数
+                    const cols = Math.ceil(Math.sqrt(repeatCount));
+                    const rows = Math.ceil(repeatCount / cols);
+                    
+                    // 生成网格布局的水印位置
+                    for (let i = 0; i < repeatCount && i < 9; i++) { // 限制最多9个水印
+                        const row = Math.floor(i / cols);
+                        const col = i % cols;
+                        
+                        positions.push({
+                            x: width * (col + 1) / (cols + 1) - textWidth / 2,
+                            y: height * (row + 1) / (rows + 1) - textHeight / 2
+                        });
                     }
-                ];
+                }
                 
-                // 在3个位置重复添加水印文本
+                // 根据生成的位置添加水印文本
                 positions.forEach((position) => {
                     page.drawText(finalWatermarkText, {
                         x: position.x,

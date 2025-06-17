@@ -1,7 +1,7 @@
 const API_BASE_URL = 'http://localhost:3001/api/pdf';
 
 export const pdfService = {
-  async addWatermark(file: File, watermarkText: string, rotation?: number, opacity?: number) {
+  async addWatermark(file: File, watermarkText: string, rotation?: number, opacity?: number, repeatCount?: number, fontSize?: number) {
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('watermarkText', watermarkText);
@@ -12,6 +12,14 @@ export const pdfService = {
     
     if (opacity !== undefined) {
       formData.append('opacity', opacity.toString());
+    }
+    
+    if (repeatCount !== undefined) {
+      formData.append('repeatCount', repeatCount.toString());
+    }
+    
+    if (fontSize !== undefined) {
+      formData.append('fontSize', fontSize.toString());
     }
     
     const response = await fetch(`${API_BASE_URL}/watermark`, {

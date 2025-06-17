@@ -10,6 +10,8 @@ export const WatermarkPage: React.FC = () => {
   const [watermarkText, setWatermarkText] = useState('');
   const [rotation, setRotation] = useState(-45);
   const [opacity, setOpacity] = useState(0.3);
+  const [repeatCount, setRepeatCount] = useState(3);
+  const [fontSize, setFontSize] = useState(50);
   const [loading, setLoading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
@@ -21,7 +23,7 @@ export const WatermarkPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const result = await pdfService.addWatermark(file, watermarkText, rotation, opacity);
+      const result = await pdfService.addWatermark(file, watermarkText, rotation, opacity, repeatCount, fontSize);
       setDownloadUrl(result.downloadUrl);
       message.success('水印添加成功!');
     } catch (error: any) {
@@ -79,7 +81,7 @@ export const WatermarkPage: React.FC = () => {
           />
           
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={6}>
               <div className="mb-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   旋转角度: {rotation}°
@@ -94,7 +96,7 @@ export const WatermarkPage: React.FC = () => {
                 />
               </div>
             </Col>
-            <Col span={12}>
+            <Col span={6}>
               <div className="mb-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   透明度: {Math.round(opacity * 100)}%
@@ -106,6 +108,36 @@ export const WatermarkPage: React.FC = () => {
                   value={opacity}
                   onChange={setOpacity}
                   tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
+                />
+              </div>
+            </Col>
+            <Col span={6}>
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  重复次数: {repeatCount}个
+                </label>
+                <Slider
+                  min={1}
+                  max={9}
+                  step={1}
+                  value={repeatCount}
+                  onChange={setRepeatCount}
+                  tooltip={{ formatter: (value) => `${value || 1}个` }}
+                />
+              </div>
+            </Col>
+            <Col span={6}>
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  字体大小: {fontSize}px
+                </label>
+                <Slider
+                  min={12}
+                  max={120}
+                  step={2}
+                  value={fontSize}
+                  onChange={setFontSize}
+                  tooltip={{ formatter: (value) => `${value || 50}px` }}
                 />
               </div>
             </Col>
