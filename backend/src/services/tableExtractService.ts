@@ -5,6 +5,7 @@ import { extractText, getDocumentProxy } from 'unpdf';
 import * as XLSX from 'xlsx';
 import tesseract from 'node-tesseract-ocr';
 import { fromPath } from 'pdf2pic';
+import sharp from 'sharp';
 
 interface ExtractTablesOptions {
     pdfPath: string;
@@ -238,18 +239,41 @@ export class TableExtractService {
                 tessedit_pageseg_mode: 6,
                 preserve_interword_spaces: 1,  // 保持单词间空格
                 tessedit_create_hocr: 0,       // 不创建HOCR输出
-                tessedit_create_tsv: 0        // 不创建TSV输出
+                tessedit_create_tsv: 0,        // 不创建TSV输出
+                // 针对扫描件的额外优化配置
+                tessedit_ocr_engine_mode: 1,      // LSTM引擎
+                textord_really_old_xheight: 1,    // 改善字符高度检测
+                textord_min_linesize: 2.5,        // 最小行高
+                user_defined_dpi: 300,            // 设置DPI
+                tessedit_char_blacklist: '',       // 不黑名单任何字符
+                load_system_dawg: 0,              // 不加载系统词典
+                load_freq_dawg: 0,                // 不加载频率词典
+                load_unambig_dawg: 0,             // 不加载无歧义词典
+                load_punc_dawg: 0,                // 不加载标点词典
+                load_number_dawg: 0,              // 不加载数字词典
+                load_bigram_dawg: 0               // 不加载双字母词典
             };
             
-            // 配置系统环境变量
-            process.env.PATH = process.env.PATH + ':/usr/local/bin:/opt/homebrew/bin';
-            process.env.MAGICK_HOME = process.env.MAGICK_HOME || '/usr/local';
-            process.env.DYLD_LIBRARY_PATH = process.env.DYLD_LIBRARY_PATH || '/usr/local/lib:/opt/homebrew/lib';
+            // 配置图像处理 - 使用Sharp替代ImageMagick
+            console.log('图像处理配置:');
+            console.log('- 使用Sharp进行图像预处理');
+            console.log('- 自动处理架构兼容性');
+            console.log('- 高性能图像处理库');
             
-            console.log('环境变量配置:');
-            console.log(`- PATH: ${process.env.PATH}`);
-            console.log(`- MAGICK_HOME: ${process.env.MAGICK_HOME}`);
-            console.log(`- DYLD_LIBRARY_PATH: ${process.env.DYLD_LIBRARY_PATH}`);
+            // Sharp配置选项
+            const sharpOptions = {
+                // 提高图像质量以便OCR识别
+                density: 300,
+                // 转换为灰度图像
+                greyscale: true,
+                // 增强对比度
+                normalize: true
+            };
+            
+            console.log('Sharp配置:');
+            console.log(`- 密度: ${sharpOptions.density} DPI`);
+            console.log(`- 灰度处理: ${sharpOptions.greyscale}`);
+            console.log(`- 对比度增强: ${sharpOptions.normalize}`);
             
             console.log('\nTesseract OCR配置:');
             console.log(`- 语言: ${ocrConfig.lang}`);
@@ -258,6 +282,7 @@ export class TableExtractService {
             console.log(`- 保持空格: ${ocrConfig.preserve_interword_spaces}`);
             
             let totalOcrTime = 0;
+            let totalPreprocessTime = 0;
             let successfulPages = 0;
             
             // 对每个页面进行OCR识别
@@ -275,26 +300,94 @@ export class TableExtractService {
                      
                      console.log(`图片buffer大小: ${pageResult.buffer.length} 字节`);
                      
+                     // 使用Sharp进行图像预处理以提高OCR效果
+                     console.log(`开始Sharp图像预处理第 ${i + 1} 页...`);
+                     const preprocessStart = Date.now();
+                     
+                     // 针对扫描版PDF优化的图像预处理
+                     const processedImageBuffer = await sharp(pageResult.buffer)
+                         .resize({ width: 2480, height: 3508, fit: 'inside', withoutEnlargement: false }) // 放大到A4尺寸300DPI
+                         .greyscale() // 转为灰度图像
+                         .gamma(1.2) // 调整伽马值增强对比度
+                         .normalize() // 标准化亮度
+                         .linear(1.2, -(128 * 0.2)) // 线性变换增强对比度
+                         .sharpen({ sigma: 1, m1: 0.5, m2: 2, x1: 2, y2: 10, y3: 20 }) // 精细锐化
+                         .median(3) // 中值滤波去噪
+                         .threshold(128) // 二值化处理
+                         .png({ quality: 100, compressionLevel: 0 }) // 无损PNG输出
+                         .toBuffer();
+                     
+                     const preprocessTime = Date.now() - preprocessStart;
+                     totalPreprocessTime += preprocessTime;
+                     console.log(`Sharp预处理完成，耗时: ${preprocessTime}ms`);
+                     console.log(`处理后图片大小: ${processedImageBuffer.length} 字节`);
+                     
                      // 使用Tesseract进行OCR识别
                      console.log(`开始OCR识别第 ${i + 1} 页...`);
                      const pageOcrStart = Date.now();
-                     const ocrText = await tesseract.recognize(pageResult.buffer, ocrConfig);
+                     const ocrText = await tesseract.recognize(processedImageBuffer, ocrConfig);
                      const pageOcrTime = Date.now() - pageOcrStart;
                      totalOcrTime += pageOcrTime;
                      
                      console.log(`第 ${i + 1} 页OCR识别完成，耗时: ${pageOcrTime}ms`);
                      
+                     // 详细的OCR结果分析
+                     console.log(`\n=== 第 ${i + 1} 页OCR结果详细分析 ===`);
                      if (ocrText && ocrText.trim().length > 0) {
                          console.log(`✓ 识别文本长度: ${ocrText.length} 字符`);
-                         console.log(`文本前200字符: ${ocrText.substring(0, 200)}`);
+                         console.log(`✓ 去空格后长度: ${ocrText.trim().length} 字符`);
+                         console.log(`✓ 行数: ${ocrText.split('\n').length}`);
+                         console.log(`✓ 非空行数: ${ocrText.split('\n').filter(line => line.trim().length > 0).length}`);
+                         
+                         // 字符类型统计
+                         const hasNumbers = /\d/.test(ocrText);
+                         const hasChinese = /[\u4e00-\u9fa5]/.test(ocrText);
+                         const hasEnglish = /[a-zA-Z]/.test(ocrText);
+                         const hasSpaces = /\s{2,}/.test(ocrText);
+                         const hasTabs = /\t/.test(ocrText);
+                         const hasPunctuation = /[，。、；：！？]/.test(ocrText);
+                         
+                         console.log(`字符类型分析:`);
+                         console.log(`  - 包含数字: ${hasNumbers}`);
+                         console.log(`  - 包含中文: ${hasChinese}`);
+                         console.log(`  - 包含英文: ${hasEnglish}`);
+                         console.log(`  - 包含多空格: ${hasSpaces}`);
+                         console.log(`  - 包含制表符: ${hasTabs}`);
+                         console.log(`  - 包含标点: ${hasPunctuation}`);
+                         
+                         // 显示完整OCR文本（分段显示）
+                         console.log(`\n完整OCR文本内容:`);
+                         console.log(`"""`);
+                         console.log(ocrText);
+                         console.log(`"""`);
+                         
+                         // 按行显示前20行
+                         const lines = ocrText.split('\n');
+                         console.log(`\n前20行详细内容:`);
+                         for (let lineIdx = 0; lineIdx < Math.min(20, lines.length); lineIdx++) {
+                             const line = lines[lineIdx];
+                             console.log(`  行${lineIdx + 1}: "${line}" (长度: ${line.length})`);
+                         }
+                         
                          successfulPages++;
                          
                          // 从OCR文本中提取表格
-                         console.log(`开始从第 ${i + 1} 页文本中提取表格...`);
+                         console.log(`\n开始从第 ${i + 1} 页文本中提取表格...`);
                          const pageTables = await this.extractTablesFromText(ocrText, 1);
                          
                          if (pageTables.length > 0) {
                              console.log(`✓ 第 ${i + 1} 页找到 ${pageTables.length} 个表格`);
+                             // 详细显示每个表格
+                             pageTables.forEach((table, tableIdx) => {
+                                 console.log(`  表格${tableIdx + 1}:`);
+                                 console.log(`    - 表头: [${table.headers.join(', ')}]`);
+                                 console.log(`    - 行数: ${table.rows.length}`);
+                                 console.log(`    - 列数: ${table.headers.length}`);
+                                 if (table.rows.length > 0) {
+                                     console.log(`    - 第一行数据: [${table.rows[0].join(', ')}]`);
+                                 }
+                             });
+                             
                              // 更新页码信息
                              pageTables.forEach(table => {
                                  table.page = i + 1;
@@ -303,9 +396,19 @@ export class TableExtractService {
                              });
                          } else {
                              console.log(`✗ 第 ${i + 1} 页未识别到表格结构`);
+                             console.log(`可能的原因:`);
+                             console.log(`  1. OCR文本中没有符合表格模式的行`);
+                             console.log(`  2. 表格分隔符识别失败`);
+                             console.log(`  3. 文本格式不规范`);
+                             console.log(`  4. 需要调整表格检测参数`);
                          }
                      } else {
                          console.log(`⚠️ 第 ${i + 1} 页OCR未识别到任何文本`);
+                         console.log(`可能的原因:`);
+                         console.log(`  1. 图像质量过低`);
+                         console.log(`  2. 图像预处理参数不当`);
+                         console.log(`  3. OCR配置问题`);
+                         console.log(`  4. 页面为空白或纯图像`);
                      }
                  } catch (pageOcrError: any) {
                      console.error(`✗ 第 ${i + 1} 页OCR识别失败:`, pageOcrError.message);
@@ -315,8 +418,11 @@ export class TableExtractService {
             console.log('\n--- OCR识别统计 ---');
             console.log(`总页数: ${results.length}`);
             console.log(`成功识别页数: ${successfulPages}`);
+            console.log(`总Sharp预处理耗时: ${totalPreprocessTime}ms`);
             console.log(`总OCR耗时: ${totalOcrTime}ms`);
-            console.log(`平均每页耗时: ${successfulPages > 0 ? Math.round(totalOcrTime / successfulPages) : 0}ms`);
+            console.log(`平均每页预处理耗时: ${successfulPages > 0 ? Math.round(totalPreprocessTime / successfulPages) : 0}ms`);
+            console.log(`平均每页OCR耗时: ${successfulPages > 0 ? Math.round(totalOcrTime / successfulPages) : 0}ms`);
+            console.log(`总处理耗时: ${totalPreprocessTime + totalOcrTime}ms`);
             
             // 清理临时图片文件
             console.log('\n清理临时文件...');
@@ -352,22 +458,40 @@ export class TableExtractService {
     }
     
     private async extractTablesFromText(text: string, pageCount: number): Promise<TableData[]> {
-        console.log(`\n--- 开始从文本中提取表格 ---`);
+        console.log(`\n=== 开始从文本中提取表格 ===`);
         console.log(`文本总长度: ${text.length} 字符`);
         console.log(`PDF总页数: ${pageCount}`);
         
         const tables: TableData[] = [];
         
         // 清理和预处理文本
+        console.log(`\n--- 文本预处理阶段 ---`);
         const cleanedText = this.preprocessText(text);
         const lines = cleanedText.split('\n').filter(line => line.trim().length > 0);
         
+        console.log(`原始文本行数: ${text.split('\n').length}`);
         console.log(`处理后的有效行数: ${lines.length}`);
-        console.log('原始文本前500字符:', text.substring(0, 500));
-        console.log('清理后文本前500字符:', cleanedText.substring(0, 500));
-        console.log(`前10行内容:`);
-        for (let i = 0; i < Math.min(10, lines.length); i++) {
-            console.log(`  ${i+1}: ${lines[i].substring(0, 100)}${lines[i].length > 100 ? '...' : ''}`);
+        console.log(`过滤掉的空行数: ${text.split('\n').length - lines.length}`);
+        
+        console.log(`\n原始文本前500字符:`);
+        console.log(`"""`);
+        console.log(text.substring(0, 500));
+        console.log(`"""`);
+        
+        console.log(`\n清理后文本前500字符:`);
+        console.log(`"""`);
+        console.log(cleanedText.substring(0, 500));
+        console.log(`"""`);
+        
+        console.log(`\n所有有效行内容 (前30行):`);
+        for (let i = 0; i < Math.min(30, lines.length); i++) {
+            const line = lines[i];
+            console.log(`  行${i+1}: "${line}" (长度: ${line.length})`);
+        }
+        
+        if (lines.length === 0) {
+            console.log(`⚠️ 警告: 没有有效的文本行，无法提取表格`);
+            return tables;
         }
         
         // 增加文本内容分析
@@ -611,10 +735,14 @@ export class TableExtractService {
     }
     
     private hasNumberTextPattern(line: string): boolean {
+        console.log(`\n--- 数字文本模式分析 ---`);
+        console.log(`分析行: "${line.substring(0, 60)}${line.length > 60 ? '...' : ''}"`);
+        
         // 检查行是否包含数字和文本的混合模式，可能是表格数据
         const hasNumbers = /\d/.test(line);
         const hasText = /[a-zA-Z\u4e00-\u9fa5]/.test(line);
         const hasMultipleWords = line.split(/\s+/).length >= 2;
+        const wordCount = line.split(/\s+/).length;
         
         // 针对扫描件的额外检查
         const hasChineseNumbers = /[一二三四五六七八九十百千万亿]/.test(line);  // 中文数字
@@ -622,65 +750,239 @@ export class TableExtractService {
         const hasAmount = /\d+\.\d{2}/.test(line);      // 金额格式
         const hasPercentage = /\d+%/.test(line);        // 百分比
         
-        return (hasNumbers || hasChineseNumbers || hasAccountNumber) && 
-               hasText && 
-               (hasMultipleWords || hasAmount || hasPercentage) && 
-               line.length >= 8;
+        // 提取所有数字
+        const numbers = line.match(/\d+([.,]\d+)?/g) || [];
+        const chineseNumbers = line.match(/[一二三四五六七八九十百千万亿]+/g) || [];
+        
+        console.log(`基本特征:`);
+        console.log(`  包含阿拉伯数字: ${hasNumbers} (${numbers.length}个)`);
+        console.log(`  包含文本: ${hasText}`);
+        console.log(`  多词: ${hasMultipleWords} (${wordCount}个词)`);
+        console.log(`  行长度: ${line.length}字符`);
+        
+        console.log(`扫描件特征:`);
+        console.log(`  包含中文数字: ${hasChineseNumbers} (${chineseNumbers.length}个)`);
+        console.log(`  包含长数字/账号: ${hasAccountNumber}`);
+        console.log(`  包含金额格式: ${hasAmount}`);
+        console.log(`  包含百分比: ${hasPercentage}`);
+        
+        if (numbers.length > 0) {
+            console.log(`  数字列表: ${numbers.join(', ')}`);
+        }
+        
+        if (chineseNumbers.length > 0) {
+            console.log(`  中文数字列表: ${chineseNumbers.join(', ')}`);
+        }
+        
+        // 判断结果
+        const result = (hasNumbers || hasChineseNumbers || hasAccountNumber) && 
+                       hasText && 
+                       (hasMultipleWords || hasAmount || hasPercentage) && 
+                       line.length >= 8;
+        
+        console.log(`判断结果: ${result ? '✓ 符合数字文本模式' : '✗ 不符合数字文本模式'}`);
+        if (!result) {
+            console.log(`  不符合原因: ${!hasNumbers && !hasChineseNumbers && !hasAccountNumber ? '无数字' : 
+                                    !hasText ? '无文本' : 
+                                    !hasMultipleWords && !hasAmount && !hasPercentage ? '无多词/金额/百分比' : 
+                                    line.length < 8 ? '行太短' : '未知'}`);
+        }
+        
+        return result;
     }
     
-    // 新增：智能分割表格行的方法
+    // 新增：智能分割表格行的方法 - 针对扫描件优化
     private smartSplitTableRow(line: string): string[] {
-        const columns: string[] = [];
+        const trimmedLine = line.trim();
+        console.log(`\n=== 智能分割行 ===`);
+        console.log(`输入: "${trimmedLine}"`);
+        console.log(`长度: ${trimmedLine.length} 字符`);
         
-        // 尝试基于中文、数字、英文的模式进行分割
-        // 模式1：序号 + 中文名称 + 数字/账号 + 金额
-        const pattern1 = /^(\d+)\s*([\u4e00-\u9fa5]+.*?)\s+(\d{10,})\s+([\d.]+)$/;
-        const match1 = line.match(pattern1);
-        if (match1) {
-            return [match1[1], match1[2].trim(), match1[3], match1[4]];
+        // 预定义的表格模式
+        const tablePatterns = [
+            // 模式1：序号 + 中文名称 + 数字/账号 + 金额
+            {
+                name: '序号+名称+账号+金额',
+                pattern: /^(\d+)\s*([\u4e00-\u9fa5]+.*?)\s+(\d{8,})\s+([\d.,]+)$/,
+                extract: (match: RegExpMatchArray) => [match[1], match[2].trim(), match[3], match[4]]
+            },
+            // 模式2：序号 + 名称 + 多个数值
+            {
+                name: '序号+名称+数值',
+                pattern: /^(\d+)\s*([\u4e00-\u9fa5]+.*?)\s+([\d.,]+(?:\s+[\d.,]+)*)$/,
+                extract: (match: RegExpMatchArray) => {
+                    const numbers = match[3].split(/\s+/).filter(n => n.trim());
+                    return [match[1], match[2].trim(), ...numbers];
+                }
+            },
+            // 模式3：名称 + 冒号 + 数值
+            {
+                name: '名称+冒号+数值',
+                pattern: /^([\u4e00-\u9fa5]+.*?)[：:]\s*([\d.,]+(?:\s+[\d.,]+)*)$/,
+                extract: (match: RegExpMatchArray) => {
+                    const numbers = match[2].split(/\s+/).filter(n => n.trim());
+                    return [match[1].trim(), ...numbers];
+                }
+            },
+            // 模式4：日期 + 描述 + 金额
+            {
+                name: '日期+描述+金额',
+                pattern: /^(\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2}|\d{1,2}[-\/月]\d{1,2})\s+([\u4e00-\u9fa5]+.*?)\s+([\d.,]+)$/,
+                extract: (match: RegExpMatchArray) => [match[1], match[2].trim(), match[3]]
+            },
+            // 模式5：编号 + 名称 + 数值
+            {
+                name: '编号+名称+数值',
+                pattern: /^([a-zA-Z0-9-_]+)\s+([\u4e00-\u9fa5]+.*?)\s+([\d.,]+)$/,
+                extract: (match: RegExpMatchArray) => [match[1], match[2].trim(), match[3]]
+            }
+        ];
+        
+        console.log(`\n--- 尝试预定义模式匹配 ---`);
+        // 尝试匹配预定义模式
+        for (const { name, pattern, extract } of tablePatterns) {
+            console.log(`测试模式 [${name}]...`);
+            const match = trimmedLine.match(pattern);
+            if (match) {
+                const result = extract(match);
+                console.log(`✓ 匹配成功! 模式 [${name}]: ${result.length}列`);
+                console.log(`  完整匹配: "${match[0]}"`);
+                for (let i = 1; i < match.length; i++) {
+                    console.log(`  捕获组${i}: "${match[i]}"`);
+                }
+                console.log(`  分割结果: ${result.map(r => `"${r}"`).join(', ')}`);
+                return result;
+            } else {
+                console.log(`✗ 不匹配`);
+            }
         }
         
-        // 模式2：基于空格和数字边界进行智能分割
-        const parts = line.split(/\s+/);
+        console.log(`\n--- 未匹配预定义模式，使用通用分割 ---`);
+        
+        // 通用智能分割算法
+        console.log(`1. 尝试空格分割:`);
+        const parts = trimmedLine.split(/\s+/);
+        console.log(`  空格分割得到 ${parts.length} 部分:`);
+        parts.forEach((part, index) => {
+            console.log(`    部分${index + 1}: "${part}" (${part.length}字符)`);
+        });
+        
         if (parts.length >= 3) {
-            // 合并连续的中文部分
+            console.log(`\n2. 尝试智能合并:`);
+            // 合并策略：将连续的中文部分合并
             const merged: string[] = [];
-            let currentChinese = '';
+            let currentGroup = '';
+            let groupType = ''; // 'chinese', 'number', 'english', 'mixed'
             
-            for (const part of parts) {
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                let partType = '';
+                
                 if (/^[\u4e00-\u9fa5]+$/.test(part)) {
-                    currentChinese += (currentChinese ? ' ' : '') + part;
+                    partType = 'chinese';
+                } else if (/^\d+([.,]\d+)*$/.test(part)) {
+                    partType = 'number';
+                } else if (/^[a-zA-Z]+$/.test(part)) {
+                    partType = 'english';
                 } else {
-                    if (currentChinese) {
-                        merged.push(currentChinese);
-                        currentChinese = '';
+                    partType = 'mixed';
+                }
+                
+                console.log(`  分析部分${i + 1}: "${part}" - 类型: ${partType}`);
+                
+                // 合并相同类型的连续部分（除了数字）
+                if (partType === groupType && partType === 'chinese') {
+                    console.log(`    合并到当前组: "${currentGroup}" + "${part}"`);
+                    currentGroup += ' ' + part;
+                } else {
+                    if (currentGroup) {
+                        console.log(`    添加组: "${currentGroup}"`);
+                        merged.push(currentGroup);
                     }
-                    merged.push(part);
+                    console.log(`    开始新组: "${part}"`);
+                    currentGroup = part;
+                    groupType = partType;
                 }
             }
-            if (currentChinese) {
-                merged.push(currentChinese);
+            
+            if (currentGroup) {
+                console.log(`  添加最后一组: "${currentGroup}"`);
+                merged.push(currentGroup);
             }
             
-            return merged.filter(p => p.trim().length > 0);
+            console.log(`  合并后得到 ${merged.length} 列:`);
+            merged.forEach((col, index) => {
+                console.log(`    列${index + 1}: "${col}" (${col.length}字符)`);
+            });
+            
+            const filtered = merged.filter(p => p.trim().length > 0);
+            if (filtered.length < merged.length) {
+                console.log(`  过滤空值后: ${filtered.length} 列`);
+            }
+            
+            if (filtered.length >= 2) {
+                console.log(`✓ 智能合并成功，返回 ${filtered.length} 列`);
+                return filtered;
+            } else {
+                console.log(`✗ 智能合并后列数不足，继续尝试其他方法`);
+            }
         }
         
-        return parts.filter(p => p.trim().length > 0);
+        console.log(`\n3. 尝试替代分隔符:`);
+        // 如果空格分割效果不好，尝试其他分割方式
+        const alternativeSeparators = [
+            { name: '逗号', pattern: /[,，]/g },
+            { name: '分号', pattern: /[;；]/g },
+            { name: '竖线', pattern: /[|｜]/g },
+            { name: '制表符', pattern: /[\t]/g }
+        ];
+        
+        for (const { name, pattern } of alternativeSeparators) {
+            console.log(`  尝试 [${name}] 分隔:`);
+            const altParts = trimmedLine.split(pattern).filter(p => p.trim().length > 0);
+            if (altParts.length >= 2) {
+                console.log(`    ✓ 成功! 得到 ${altParts.length} 列:`);
+                altParts.forEach((part, index) => {
+                    console.log(`      列${index + 1}: "${part.trim()}"`);
+                });
+                return altParts.map(p => p.trim());
+            } else {
+                console.log(`    ✗ 失败，列数不足: ${altParts.length}`);
+            }
+        }
+        
+        console.log(`\n4. 所有分割方法都失败，返回原始空格分割结果`);
+        const finalResult = parts.filter(p => p.trim().length > 0);
+        console.log(`  最终结果: ${finalResult.length} 列`);
+        return finalResult;
     }
     
     private isTableRow(line: string): boolean {
         const originalLine = line;
         const trimmedLine = line.trim();
         
-        console.log(`\n--- 分析行: "${trimmedLine.substring(0, 60)}${trimmedLine.length > 60 ? '...' : ''}" ---`);
+        console.log(`\n=== 分析行: "${trimmedLine.substring(0, 60)}${trimmedLine.length > 60 ? '...' : ''}" ===`);
+        
+        // 详细分析行内容
+        console.log(`行详细信息:`);
+        console.log(`  原始长度: ${line.length}`);
+        console.log(`  修剪后长度: ${trimmedLine.length}`);
+        console.log(`  前导空格数: ${line.length - line.trimLeft().length}`);
+        console.log(`  尾部空格数: ${line.length - line.trimRight().length}`);
+        console.log(`  包含数字: ${/\d/.test(trimmedLine)}`);
+        console.log(`  包含中文: ${/[\u4e00-\u9fa5]/.test(trimmedLine)}`);
+        console.log(`  包含英文: ${/[a-zA-Z]/.test(trimmedLine)}`);
+        console.log(`  包含标点: ${/[,.:;，。：；]/.test(trimmedLine)}`);
+        console.log(`  包含空格: ${/\s/.test(trimmedLine)}`);
+        console.log(`  空格数量: ${(trimmedLine.match(/\s/g) || []).length}`);
+        console.log(`  连续空格: ${/\s{2,}/.test(trimmedLine) ? '是' : '否'}`);
+        console.log(`  最长连续空格: ${Math.max(...(trimmedLine.match(/\s+/g) || ['']).map(s => s.length))}`);
         
         // 跳过空行和太短的行
-        if (trimmedLine.length < 8) {
+        if (trimmedLine.length < 5) { // 降低最小长度要求，适应扫描件
             console.log(`✗ 行太短，跳过: "${trimmedLine}" (长度: ${trimmedLine.length})`);
             return false;
         }
-        
-        console.log(`行长度: ${trimmedLine.length}`);
         
         // 扩展的分隔符模式 - 针对扫描件优化
         const separatorPatterns = [
@@ -691,13 +993,41 @@ export class TableExtractService {
             { name: '数字间空格', pattern: /(?<=\d)\s+(?=\d)/ },
             { name: '中文数字', pattern: /(?<=[\u4e00-\u9fa5])\s+(?=\d)/ },
             { name: '小数空格', pattern: /(?<=\d\.\d)\s+/ },
+            // 扫描件特有模式
+            { name: '数字后空格', pattern: /\d+\s+/ },
+            { name: '中文后空格', pattern: /[\u4e00-\u9fa5]+\s+/ },
+            { name: '字母后空格', pattern: /[a-zA-Z]+\s+/ },
+            { name: '空格数字', pattern: /\s+\d+/ },
+            { name: '空格中文', pattern: /\s+[\u4e00-\u9fa5]+/ },
+            { name: '空格字母', pattern: /\s+[a-zA-Z]+/ },
+            { name: '字符间隔', pattern: /(?<=.)\s{1,}(?=.)/ }, // 更宽松的空格匹配
         ];
         
+        console.log(`\n--- 分隔符检测 ---`);
         // 检查是否包含分隔符
         let matchedSeparators: string[] = [];
         const hasSeparator = separatorPatterns.some(({ name, pattern }) => {
-            if (pattern.test(trimmedLine)) {
+            const matches = trimmedLine.match(pattern);
+            if (matches) {
                 matchedSeparators.push(name);
+                console.log(`  ✓ 匹配分隔符 [${name}]: ${matches.length}个匹配`);
+                if (matches.length > 0 && name.includes('空格')) {
+                    // 显示空格位置
+                    const positions: number[] = [];
+                    let match;
+                    const regex = new RegExp(pattern);
+                    let tempStr = trimmedLine;
+                    let offset = 0;
+                    
+                    while ((match = regex.exec(tempStr)) !== null) {
+                        positions.push(match.index + offset);
+                        offset += match.index + match[0].length;
+                        tempStr = tempStr.substring(match.index + match[0].length);
+                        if (positions.length >= 5) break; // 最多显示5个位置
+                    }
+                    
+                    console.log(`    空格位置: ${positions.join(', ')}`);
+                }
                 return true;
             }
             return false;
@@ -705,18 +1035,43 @@ export class TableExtractService {
         
         console.log(`分隔符检测结果: ${matchedSeparators.length > 0 ? matchedSeparators.join(', ') : '无'}`);
         
-        if (!hasSeparator) {
-            // 特殊检查：是否包含序号、中文、数字的组合（常见于扫描件表格）
-            const hasSequentialPattern = /^\d+[\s\u4e00-\u9fa5]+.*\d/.test(trimmedLine);
-            console.log(`序号模式检查: ${hasSequentialPattern}`);
-            if (hasSequentialPattern) {
-                console.log(`✓ 序号模式匹配，判定为表格行`);
+        console.log(`\n--- 特殊模式检测 ---`);
+        // 扫描件特殊模式检查
+        const specialPatterns = [
+            { name: '序号模式', pattern: /^\d+[\s\u4e00-\u9fa5]+.*\d/, description: '行首数字+空格+中文+数字' },
+            { name: '表格项目', pattern: /^[\u4e00-\u9fa5]{2,}[：:]+/, description: '中文标题+冒号' },
+            { name: '数字序列', pattern: /\d+([.,，、]\d+)+/, description: '多个数字序列' },
+            { name: '金额模式', pattern: /\d+([.,]\d{2})/, description: '金额格式' },
+            { name: '日期模式', pattern: /(\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2}|\d{1,2}[-\/月]\d{1,2}[-\/日])/, description: '日期格式' },
+            { name: '百分比', pattern: /\d+([.,]\d+)?\s*[%％]/, description: '百分比格式' },
+            { name: '编号模式', pattern: /[a-zA-Z0-9]{2,}[-_][a-zA-Z0-9]{2,}/, description: '编号格式' },
+        ];
+        
+        // 检查特殊模式
+        let matchedSpecialPatterns: string[] = [];
+        const hasSpecialPattern = specialPatterns.some(({ name, pattern, description }) => {
+            const match = trimmedLine.match(pattern);
+            if (match) {
+                matchedSpecialPatterns.push(name);
+                console.log(`  ✓ 匹配特殊模式 [${name}]: ${description}`);
+                console.log(`    匹配内容: "${match[0]}"`);
                 return true;
             }
-            console.log(`✗ 未找到分隔符且不符合序号模式，判定为非表格行`);
+            return false;
+        });
+        
+        console.log(`特殊模式检测结果: ${matchedSpecialPatterns.length > 0 ? matchedSpecialPatterns.join(', ') : '无'}`);
+        
+        // 如果没有常规分隔符但有特殊模式，也视为表格行
+        if (!hasSeparator && hasSpecialPattern) {
+            console.log(`✓ 特殊模式匹配 [${matchedSpecialPatterns.join(', ')}]，判定为表格行`);
+            return true;
+        } else if (!hasSeparator && !hasSpecialPattern) {
+            console.log(`✗ 未找到分隔符且不符合特殊模式，判定为非表格行`);
             return false;
         }
         
+        console.log(`\n--- 行分割测试 ---`);
         console.log(`✓ 检测到分隔符 [${matchedSeparators.join(', ')}]`);
         
         // 尝试分割行
@@ -732,8 +1087,6 @@ export class TableExtractService {
                     columns = testColumns;
                     bestSeparator = name;
                 }
-            } else {
-                console.log(`  ${name}: 不匹配`);
             }
         }
         
@@ -752,23 +1105,37 @@ export class TableExtractService {
         
         // 显示分割结果
         if (columns.length > 0) {
-            console.log(`分割结果预览:`);
-            columns.slice(0, 3).forEach((col, index) => {
-                console.log(`  列${index + 1}: "${col.substring(0, 20)}${col.length > 20 ? '...' : ''}"`);
+            console.log(`\n分割结果详情:`);
+            columns.forEach((col, index) => {
+                console.log(`  列${index + 1}: "${col}" (长度: ${col.length})`);
             });
         }
         
         // 检查是否有足够的列且列内容合理
         const hasEnoughColumns = columns.length >= 2;
-        const hasValidContent = columns.every(col => col.trim().length > 0 && col.trim().length < 150);
+        const hasValidContent = columns.every(col => col.trim().length > 0 && col.trim().length < 200); // 增加长度限制
         
         // 检查是否包含数字和文本的混合模式（表格特征）
         const hasPattern = this.hasNumberTextPattern(trimmedLine);
+        console.log(`\n--- 表格特征分析 ---`);
         console.log(`数字文本模式检查: ${hasPattern ? '✓' : '✗'}`);
         
-        const isValid = hasEnoughColumns && hasValidContent;
+        // 详细分析每列内容类型
+        if (columns.length > 0) {
+            console.log(`列内容类型分析:`);
+            columns.forEach((col, index) => {
+                const hasNum = /\d/.test(col);
+                const hasChinese = /[\u4e00-\u9fa5]/.test(col);
+                const hasEnglish = /[a-zA-Z]/.test(col);
+                const hasSymbol = /[,.:;，。：；%]/.test(col);
+                console.log(`  列${index + 1}: 数字=${hasNum}, 中文=${hasChinese}, 英文=${hasEnglish}, 符号=${hasSymbol}`);
+            });
+        }
         
-        console.log(`最终判断:`);
+        // 放宽判断条件，只要有足够的列或符合数字文本模式即可
+        const isValid = (hasEnoughColumns && hasValidContent) || (hasPattern && columns.length > 0);
+        
+        console.log(`\n--- 最终判断 ---`);
         console.log(`  列数足够(>=2): ${hasEnoughColumns} (${columns.length}列)`);
         console.log(`  内容有效: ${hasValidContent}`);
         console.log(`  数字文本模式: ${hasPattern}`);
@@ -777,82 +1144,174 @@ export class TableExtractService {
             console.log(`✓ 最终判定为表格行`);
         } else {
             console.log(`✗ 最终判定为非表格行`);
+            console.log(`  原因: ${!hasEnoughColumns ? '列数不足' : !hasValidContent ? '列内容无效' : '不符合表格模式'}`);
         }
         
         return isValid;
     }
     
     private parseTableData(tableLines: string[], page: number, tableIndex: number): TableData | null {
-        if (tableLines.length < 2) return null;
+        console.log(`\n=== 开始解析表格数据 ===`);
+        console.log(`表格行数: ${tableLines.length}`);
+        
+        if (tableLines.length < 2) {
+            console.log(`✗ 表格行数不足，至少需要2行 (当前: ${tableLines.length}行)`);
+            return null;
+        }
+        
+        console.log(`表格首行: "${tableLines[0].substring(0, 100)}${tableLines[0].length > 100 ? '...' : ''}"`);
+        console.log(`表格尾行: "${tableLines[tableLines.length-1].substring(0, 100)}${tableLines[tableLines.length-1].length > 100 ? '...' : ''}"`);
         
         // 针对扫描件优化的分隔符模式
         const separatorPatterns = [
-            /\s{2,}/,      // 2个或更多空格
-            /\t+/,         // 制表符
-            /\|/,          // 竖线分隔符
-            /,\s*/,        // 逗号分隔
-            /;\s*/,        // 分号分隔
-            /\s+\d+\s+/,   // 数字前后的空格模式
-            /[\u4e00-\u9fa5]+\s+\d/,  // 中文后跟数字的模式
-            /\d+\.\d+\s+/  // 小数后跟空格的模式
+            { name: '多空格', pattern: /\s{2,}/ },      // 2个或更多空格
+            { name: '制表符', pattern: /\t+/ },         // 制表符
+            { name: '竖线', pattern: /\|/ },          // 竖线分隔符
+            { name: '逗号', pattern: /,\s*/ },        // 逗号分隔
+            { name: '分号', pattern: /;\s*/ },        // 分号分隔
+            { name: '数字空格', pattern: /\s+\d+\s+/ },   // 数字前后的空格模式
+            { name: '中文数字', pattern: /[\u4e00-\u9fa5]+\s+\d/ },  // 中文后跟数字的模式
+            { name: '小数空格', pattern: /\d+\.\d+\s+/ }  // 小数后跟空格的模式
         ];
         
-        let bestPattern = separatorPatterns[0];
+        console.log(`\n--- 表头分隔符测试 ---`);
+        let bestPattern = separatorPatterns[0].pattern;
+        let bestPatternName = separatorPatterns[0].name;
         let maxColumns = 0;
         let bestHeaders: string[] = [];
         
         // 找到能产生最多列的分隔符模式
-        for (const pattern of separatorPatterns) {
+        for (const { name, pattern } of separatorPatterns) {
             const testHeaders = tableLines[0].split(pattern).filter(col => col.trim().length > 0);
+            console.log(`  ${name}: 分割出 ${testHeaders.length} 列`);
+            if (testHeaders.length > 0) {
+                console.log(`    首列: "${testHeaders[0]}"`);
+                if (testHeaders.length > 1) {
+                    console.log(`    次列: "${testHeaders[1]}"`);
+                }
+            }
+            
             if (testHeaders.length > maxColumns) {
                 maxColumns = testHeaders.length;
                 bestPattern = pattern;
+                bestPatternName = name;
                 bestHeaders = testHeaders;
             }
         }
         
+        console.log(`最佳表头分隔符: [${bestPatternName}], 产生 ${maxColumns} 列`);
+        
         // 如果常规分隔符不行，使用智能分割
         if (maxColumns < 2) {
+            console.log(`常规分隔符效果不佳，尝试智能分割...`);
             bestHeaders = this.smartSplitTableRow(tableLines[0]);
             maxColumns = bestHeaders.length;
+            bestPatternName = '智能分割';
+            console.log(`智能分割产生 ${maxColumns} 列`);
         }
         
         // 解析表头
         const headers = bestHeaders.map(h => h.trim()).filter(h => h.length > 0);
         
-        if (headers.length < 2) return null;
+        console.log(`\n--- 表头解析结果 ---`);
+        console.log(`有效表头列数: ${headers.length}`);
+        headers.forEach((header, index) => {
+            console.log(`  表头${index + 1}: "${header}"`);
+        });
         
+        if (headers.length < 2) {
+            console.log(`✗ 表头列数不足，至少需要2列 (当前: ${headers.length}列)`);
+            return null;
+        }
+        
+        console.log(`\n--- 开始解析数据行 ---`);
         // 解析数据行
         const rows: string[][] = [];
+        let rowParseSuccessCount = 0;
+        let rowParseFailCount = 0;
+        
         for (let i = 1; i < tableLines.length; i++) {
+            console.log(`\n处理第 ${i} 行: "${tableLines[i].substring(0, 60)}${tableLines[i].length > 60 ? '...' : ''}"`);
             let rowData: string[];
             
             // 尝试使用最佳分隔符模式
             if (maxColumns >= 2 && bestPattern) {
+                console.log(`  使用 [${bestPatternName}] 分隔符分割`);
                 rowData = tableLines[i].split(bestPattern).filter(col => col.trim().length > 0).map(cell => cell.trim());
             } else {
                 // 使用智能分割
+                console.log(`  使用智能分割`);
                 rowData = this.smartSplitTableRow(tableLines[i]);
             }
             
+            console.log(`  分割结果: ${rowData.length} 列`);
+            
             if (rowData.length > 0) {
+                // 显示分割结果
+                rowData.forEach((cell, cellIndex) => {
+                    console.log(`    列${cellIndex + 1}: "${cell}"`);
+                });
+                
+                // 列数调整前
+                console.log(`  列数调整前: ${rowData.length} 列 vs 表头 ${headers.length} 列`);
+                
                 // 确保行数据与表头列数一致
-                while (rowData.length < headers.length) {
-                    rowData.push('');
+                if (rowData.length < headers.length) {
+                    console.log(`  ⚠️ 列数不足，添加 ${headers.length - rowData.length} 个空列`);
+                    while (rowData.length < headers.length) {
+                        rowData.push('');
+                    }
                 }
+                
                 // 如果行数据过多，截取到表头长度
                 if (rowData.length > headers.length) {
+                    console.log(`  ⚠️ 列数过多，截取前 ${headers.length} 列 (丢弃 ${rowData.length - headers.length} 列)`);
                     rowData = rowData.slice(0, headers.length);
                 }
+                
+                console.log(`  ✓ 成功解析行，最终 ${rowData.length} 列`);
                 rows.push(rowData);
+                rowParseSuccessCount++;
+            } else {
+                console.log(`  ✗ 行解析失败，未能提取有效列`);
+                rowParseFailCount++;
             }
         }
         
+        console.log(`\n--- 数据行解析统计 ---`);
+        console.log(`总行数: ${tableLines.length - 1}`);
+        console.log(`成功解析: ${rowParseSuccessCount} 行`);
+        console.log(`解析失败: ${rowParseFailCount} 行`);
+        
         // 只有当有实际数据行时才返回表格
-        if (rows.length === 0) return null;
+        if (rows.length === 0) {
+            console.log(`✗ 没有成功解析的数据行，表格解析失败`);
+            return null;
+        }
         
         // 后处理：清理和验证数据
+        console.log(`\n--- 表格数据清理 ---`);
+        const originalRowCount = rows.length;
         const cleanedRows = this.cleanTableRows(rows, headers.length);
+        console.log(`清理前行数: ${originalRowCount}`);
+        console.log(`清理后行数: ${cleanedRows.length}`);
+        console.log(`过滤掉的行数: ${originalRowCount - cleanedRows.length}`);
+        
+        if (cleanedRows.length === 0) {
+            console.log(`✗ 清理后没有有效数据行，表格解析失败`);
+            return null;
+        }
+        
+        console.log(`\n--- 最终表格数据 ---`);
+        console.log(`表头: ${headers.length} 列`);
+        console.log(`数据: ${cleanedRows.length} 行`);
+        
+        // 显示前3行数据预览
+        const previewRows = Math.min(3, cleanedRows.length);
+        console.log(`数据预览 (前 ${previewRows} 行):`);
+        for (let i = 0; i < previewRows; i++) {
+            console.log(`  行${i + 1}: [${cleanedRows[i].join(', ')}]`);
+        }
         
         return {
             page,

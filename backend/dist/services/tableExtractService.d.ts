@@ -14,9 +14,13 @@ export declare class TableExtractService {
     private extractTablesFromText;
     private preprocessText;
     private tryAlternativeTableExtraction;
+    private findSequentialPattern;
+    private findKeywordBasedTable;
     private hasNumberTextPattern;
+    private smartSplitTableRow;
     private isTableRow;
     private parseTableData;
+    private cleanTableRows;
     private writeToExcel;
 }
 export {};
