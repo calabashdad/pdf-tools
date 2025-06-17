@@ -9,5 +9,6 @@ router.post('/convert-to-images', upload.single('pdf'), PDFController.convertToI
 router.post('/insert-blank-page', upload.single('pdf'), PDFController.insertBlankPage);
 router.post('/add-text', upload.single('pdf'), PDFController.addText);
 router.get('/download-images-zip/:imageFolder', PDFController.downloadImagesZip);
+router.get('/download/:filename', PDFController.downloadPdf);
 
 export { router as pdfRoutes };

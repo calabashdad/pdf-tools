@@ -23,7 +23,8 @@ export class PDFController {
       
       res.json({
         message: '水印添加成功',
-        downloadUrl: `/uploads/watermarked-${file.filename}`
+        downloadUrl: `/api/pdf/download/watermarked-${file.filename}`,
+        filename: `watermarked-${file.filename}`
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '添加水印时发生未知错误';
@@ -81,7 +82,8 @@ export class PDFController {
       
       res.json({
         message: '空白页插入成功',
-        downloadUrl: `/uploads/${path.basename(outputPath)}`
+        downloadUrl: `/api/pdf/download/${path.basename(outputPath)}`,
+        filename: path.basename(outputPath)
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '插入空白页时发生未知错误';
@@ -114,7 +116,8 @@ export class PDFController {
       
       res.json({
         message: '文字添加成功',
-        downloadUrl: `/uploads/${path.basename(outputPath)}`
+        downloadUrl: `/api/pdf/download/${path.basename(outputPath)}`,
+        filename: path.basename(outputPath)
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '添加文字时发生未知错误';
@@ -174,6 +177,44 @@ export class PDFController {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '创建ZIP文件时发生未知错误';
       res.status(500).json({ error: errorMessage });
+    }
+  }
+
+  // 下载PDF文件
+  static async downloadPdf(req: Request, res: Response) {
+    try {
+      const { filename } = req.params;
+      
+      if (!filename) {
+        return res.status(400).json({ error: '请提供文件名' });
+      }
+
+      const filePath = path.join('uploads', filename);
+      
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: '文件不存在' });
+      }
+
+      // 设置响应头
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      
+      // 发送文件
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      
+      fileStream.on('error', (error) => {
+        console.error('文件流错误:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: '文件下载失败' });
+        }
+      });
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '下载文件时发生未知错误';
+      if (!res.headersSent) {
+        res.status(500).json({ error: errorMessage });
+      }
     }
   }
 }

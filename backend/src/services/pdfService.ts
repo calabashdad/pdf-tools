@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import puppeteer from 'puppeteer';
 import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import * as archiver from 'archiver';
 
 interface ConvertToImagesOptions {
@@ -197,47 +198,75 @@ export class PdfService {
             const existingPdfBytes = fs.readFileSync(pdfPath);
             const pdfDoc = await PDFDocument.load(existingPdfBytes);
             
+            // 注册fontkit以支持自定义字体
+            pdfDoc.registerFontkit(fontkit);
+            
             // 获取所有页面
             const pages = pdfDoc.getPages();
             
-            // 为每一页添加水印
+            // 嵌入字体以支持中文
+            let font: any;
+            let finalWatermarkText = watermarkText;
+            
+            // 检查是否包含中文字符
+            const containsChinese = /[\u4e00-\u9fff]/.test(watermarkText);
+            
+            if (containsChinese) {
+                // 对于包含中文的文本，尝试加载中文字体
+                try {
+                    console.log('检测到中文字符，尝试加载中文字体');
+                    const fontPath = path.join(__dirname, '..', 'NotoSansCJK-Regular.ttf');
+                    const fontBytes = fs.readFileSync(fontPath);
+                    font = await pdfDoc.embedFont(fontBytes);
+                    finalWatermarkText = watermarkText;
+                    console.log('中文字体加载成功');
+                } catch (error: any) {
+                    console.warn('中文字体加载失败，使用英文替代:', error.message);
+                    // 如果中文字体加载失败，使用英文替代
+                    font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                    
+                    // 将中文转换为英文描述
+                    const chineseToEnglish: { [key: string]: string } = {
+                        '机密': 'CONFIDENTIAL',
+                        '样本': 'SAMPLE',
+                        '草稿': 'DRAFT',
+                        '副本': 'COPY',
+                        '水印': 'WATERMARK',
+                        '涉密': 'CLASSIFIED',
+                        '内部': 'INTERNAL',
+                        '测试': 'TEST',
+                        '文件': 'FILE',
+                        '文档': 'DOCUMENT',
+                        '保密': 'CONFIDENTIAL',
+                        '重要': 'IMPORTANT',
+                        '紧急': 'URGENT',
+                        '临时': 'TEMPORARY'
+                    };
+                    
+                    // 尝试翻译常见中文词汇
+                    let translatedText = watermarkText;
+                    let hasTranslation = false;
+                    
+                    for (const [chinese, english] of Object.entries(chineseToEnglish)) {
+                        if (watermarkText.includes(chinese)) {
+                            translatedText = translatedText.replace(new RegExp(chinese, 'g'), english);
+                            hasTranslation = true;
+                        }
+                    }
+                    
+                    finalWatermarkText = hasTranslation ? translatedText : 'WATERMARK';
+                }
+            } else {
+                // 对于纯英文文本，使用Helvetica字体
+                font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                finalWatermarkText = watermarkText;
+            }
+            
+            // 遍历所有页面添加水印
             for (const page of pages) {
                 const { width, height } = page.getSize();
-                
-                // 设置水印文本样式
                 const fontSize = 50;
                 const opacity = 0.3;
-                
-                // 嵌入字体以支持中文
-                let font: any;
-                let finalWatermarkText = watermarkText;
-                try {
-                    // 尝试使用Helvetica字体，如果包含中文则会失败
-                    font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                    // 测试是否能编码水印文本
-                    font.encodeText(watermarkText);
-                } catch (error) {
-                    // 如果包含中文字符，使用Symbol字体作为fallback
-                    // 注意：这只是临时解决方案，实际应用中应该嵌入支持中文的字体文件
-                    console.warn('水印文本包含特殊字符，使用默认字体可能显示异常');
-                    font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                    // 过滤掉无法编码的字符
-                    const filteredText = watermarkText.split('').filter(char => {
-                        try {
-                            font.encodeText(char);
-                            return true;
-                        } catch {
-                            return false;
-                        }
-                    }).join('');
-                    
-                    if (filteredText.length === 0) {
-                        // 如果所有字符都无法编码，使用默认水印文本
-                        finalWatermarkText = 'WATERMARK';
-                    } else {
-                        finalWatermarkText = filteredText;
-                    }
-                }
                 
                 // 计算水印位置（居中并稍微偏下）
                 const textWidth = finalWatermarkText.length * fontSize * 0.6; // 估算文本宽度

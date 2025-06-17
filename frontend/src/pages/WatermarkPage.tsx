@@ -29,12 +29,29 @@ export const WatermarkPage: React.FC = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (downloadUrl) {
-      const link = document.createElement('a');
-      link.href = `http://localhost:3001${downloadUrl}`;
-      link.download = 'watermarked.pdf';
-      link.click();
+      try {
+        const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `http://localhost:3001${downloadUrl}`;
+        const response = await fetch(fullUrl);
+        if (!response.ok) {
+          throw new Error('下载失败');
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'watermarked.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        message.success('文件下载成功!');
+      } catch (error) {
+        message.error('下载失败，请重试');
+      }
     }
   };
 

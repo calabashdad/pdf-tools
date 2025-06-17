@@ -183,11 +183,28 @@ export const EditPage: React.FC = () => {
                 type="primary" 
                 icon={<DownloadOutlined />}
                 size="large"
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = editedPdfUrl;
-                  link.download = 'edited.pdf';
-                  link.click();
+                onClick={async () => {
+                  try {
+                    const fullUrl = editedPdfUrl.startsWith('http') ? editedPdfUrl : `http://localhost:3001${editedPdfUrl}`;
+                    const response = await fetch(fullUrl);
+                    if (!response.ok) {
+                      throw new Error('下载失败');
+                    }
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'edited.pdf';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    
+                    message.success('文件下载成功!');
+                  } catch (error) {
+                    message.error('下载失败，请重试');
+                  }
                 }}
               >
                 下载编辑后的 PDF
