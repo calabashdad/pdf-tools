@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Input, Button, message, Space, Typography } from 'antd';
+import { Card, Input, Button, message, Space, Typography, Slider, Row, Col } from 'antd';
 import { FileUpload } from '../components/FileUpload';
 import { pdfService } from '../services/pdfService';
 
@@ -8,6 +8,8 @@ const { Title } = Typography;
 export const WatermarkPage: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [watermarkText, setWatermarkText] = useState('');
+  const [rotation, setRotation] = useState(-45);
+  const [opacity, setOpacity] = useState(0.3);
   const [loading, setLoading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
@@ -19,11 +21,11 @@ export const WatermarkPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const result = await pdfService.addWatermark(file, watermarkText);
+      const result = await pdfService.addWatermark(file, watermarkText, rotation, opacity);
       setDownloadUrl(result.downloadUrl);
       message.success('水印添加成功!');
-    } catch (error) {
-      message.error('添加水印失败: ' + error.message);
+    } catch (error: any) {
+      message.error('添加水印失败: ' + (error?.message || '未知错误'));
     } finally {
       setLoading(false);
     }
@@ -75,6 +77,39 @@ export const WatermarkPage: React.FC = () => {
             onChange={(e) => setWatermarkText(e.target.value)}
             size="large"
           />
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  旋转角度: {rotation}°
+                </label>
+                <Slider
+                  min={-180}
+                  max={180}
+                  step={5}
+                  value={rotation}
+                  onChange={setRotation}
+                  tooltip={{ formatter: (value) => `${value || 0}°` }}
+                />
+              </div>
+            </Col>
+            <Col span={12}>
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  透明度: {Math.round(opacity * 100)}%
+                </label>
+                <Slider
+                  min={0.1}
+                  max={1}
+                  step={0.1}
+                  value={opacity}
+                  onChange={setOpacity}
+                  tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
+                />
+              </div>
+            </Col>
+          </Row>
           
           <Button
             type="primary"

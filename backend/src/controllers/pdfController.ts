@@ -8,7 +8,7 @@ export class PDFController {
   // 添加水印
   static async addWatermark(req: Request, res: Response) {
     try {
-      const { watermarkText } = req.body;
+      const { watermarkText, rotation, opacity } = req.body;
       const file = req.file;
       
       if (!file) {
@@ -18,8 +18,18 @@ export class PDFController {
       const inputPath = file.path;
       const outputPath = path.join('uploads', `watermarked-${file.filename}`);
       
+      // 解析旋转角度和透明度参数
+      const rotationValue = rotation ? parseFloat(rotation) : -45;
+      const opacityValue = opacity ? parseFloat(opacity) : 0.3;
+      
       const pdfService = new PdfService();
-      await pdfService.addWatermark({ pdfPath: inputPath, watermarkText, outputPath });
+      await pdfService.addWatermark({ 
+        pdfPath: inputPath, 
+        watermarkText, 
+        outputPath,
+        rotation: rotationValue,
+        opacity: opacityValue
+      });
       
       res.json({
         message: '水印添加成功',

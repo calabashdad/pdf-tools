@@ -14,6 +14,8 @@ interface AddWatermarkOptions {
     pdfPath: string;
     watermarkText: string;
     outputPath: string;
+    rotation?: number; // 旋转角度，默认-45度
+    opacity?: number;  // 透明度，0-1之间，默认0.3
 }
 
 interface InsertBlankPageOptions {
@@ -192,7 +194,7 @@ export class PdfService {
     
     async addWatermark(options: AddWatermarkOptions): Promise<void> {
         try {
-            const { pdfPath, watermarkText, outputPath } = options;
+            const { pdfPath, watermarkText, outputPath, rotation = -45, opacity = 0.3 } = options;
             
             // 读取原始PDF文件
             const existingPdfBytes = fs.readFileSync(pdfPath);
@@ -266,7 +268,6 @@ export class PdfService {
             for (const page of pages) {
                 const { width, height } = page.getSize();
                 const fontSize = 50;
-                const opacity = 0.3;
                 
                 // 计算水印位置（居中并稍微偏下）
                 const textWidth = finalWatermarkText.length * fontSize * 0.6; // 估算文本宽度
@@ -279,7 +280,7 @@ export class PdfService {
                     y: y,
                     size: fontSize,
                     opacity: opacity,
-                    rotate: degrees(-45), // 45度倾斜
+                    rotate: degrees(rotation), // 使用动态旋转角度
                     color: rgb(0.7, 0.7, 0.7),
                     font: font,
                 });
