@@ -12,6 +12,8 @@ export declare class TableExtractService {
     extractTables(options: ExtractTablesOptions): Promise<TableData[]>;
     private extractTablesWithOCR;
     private extractTablesFromText;
+    private scoreTable;
+    private parseTableWithSeparator;
     private preprocessText;
     private tryAlternativeTableExtraction;
     private findSequentialPattern;
@@ -21,6 +23,10 @@ export declare class TableExtractService {
     private isTableRow;
     private parseTableData;
     private cleanTableRows;
+    private checkColumnAlignment;
+    private checkNumericPattern;
+    private checkHeaderPattern;
+    private detectEnhancedTablePatterns;
     private writeToExcel;
 }
 export {};

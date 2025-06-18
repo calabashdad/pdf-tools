@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { PdfService } from '../services/pdfService';
-import { TableExtractService } from '../services/tableExtractService';
 import path from 'path';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
@@ -242,75 +241,5 @@ export class PDFController {
     }
   }
 
-  // 提取表格
-  static async extractTables(req: Request, res: Response) {
-    try {
-      const file = req.file;
-      
-      if (!file) {
-        return res.status(400).json({ error: '请上传PDF文件' });
-      }
-      
-      const inputPath = file.path;
-      const outputPath = path.join('uploads', `tables-${file.filename}.xlsx`);
-      
-      const tableExtractService = new TableExtractService();
-      const tables = await tableExtractService.extractTables({ 
-        pdfPath: inputPath, 
-        outputPath 
-      });
-      
-      // 根据是否找到表格返回不同的响应
-      if (tables.length === 0) {
-        res.json({
-          success: true,
-          tables: [],
-          message: '未在PDF中检测到表格结构，请确保PDF包含清晰的表格格式',
-          downloadUrl: null
-        });
-      } else {
-        res.json({
-          success: true,
-          tables,
-          message: `成功提取到 ${tables.length} 个表格`,
-          downloadUrl: `/api/pdf/download-excel/tables-${file.filename}.xlsx`,
-          filename: `tables-${file.filename}.xlsx`
-        });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '提取表格时发生未知错误';
-      res.status(500).json({ error: errorMessage });
-    }
-  }
 
-  // 下载Excel文件
-  static async downloadExcel(req: Request, res: Response) {
-    try {
-      const { filename } = req.params;
-      const filePath = path.join('uploads', filename);
-      
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: '文件不存在' });
-      }
-      
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-      
-      fileStream.on('error', (error) => {
-        console.error('文件流错误:', error);
-        if (!res.headersSent) {
-          res.status(500).json({ error: '文件下载失败' });
-        }
-      });
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '下载文件时发生未知错误';
-      if (!res.headersSent) {
-        res.status(500).json({ error: errorMessage });
-      }
-    }
-  }
 }

@@ -6,7 +6,5 @@ export declare class PDFController {
     static addText(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     static downloadImagesZip(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     static downloadPdf(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
-    static extractTables(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
-    static downloadExcel(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 }
 //# sourceMappingURL=pdfController.d.ts.map

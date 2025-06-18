@@ -102,22 +102,5 @@ export const pdfService = {
     }
     
     return response.blob();
-  },
-
-  async extractTables(file: File) {
-    const formData = new FormData();
-    formData.append('pdf', file);
-    
-    const response = await fetch(`${API_BASE_URL}/extract-tables`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || '请求失败');
-    }
-    
-    return response.json();
   }
 };
